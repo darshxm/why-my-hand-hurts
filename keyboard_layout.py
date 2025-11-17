@@ -90,7 +90,7 @@ class KeyboardLayoutOptimizer:
     # ----------------------------------------------------------------------
     # Data Loading And Analysis
     # ----------------------------------------------------------------------
-    def load_and_analyze_data(self, fernet):
+    def load_and_analyze_data(self, fernet, app_filter=None, window_filter=None):
         """Load and decrypt keystroke data and compute key and bigram frequencies."""
         print("Loading keystroke data...")
         self.df = pd.read_csv(self.keylog_file)
@@ -104,10 +104,20 @@ class KeyboardLayoutOptimizer:
             # during the logging process in keylogger.py and store the category instead of the raw key.
             # This would allow for analysis without exposing the exact keys typed.
             # This would be a major change to the project, but would significantly improve privacy.
-            self.df['key'] = self.df['key'].apply(lambda x: fernet.decrypt(x.encode()).decode())
+            self.df['key'] = self.df['key'].apply(lambda x: fernet.decrypt(str(x).encode()).decode())
+            if 'app' in self.df.columns:
+                self.df['app'] = self.df['app'].apply(lambda x: fernet.decrypt(str(x).encode()).decode())
+            if 'window_title' in self.df.columns:
+                self.df['window_title'] = self.df['window_title'].apply(lambda x: fernet.decrypt(str(x).encode()).decode())
         except InvalidToken:
             print("Decryption failed. Please check your password.")
             exit()
+
+        # Optional filters by app/window substring
+        if app_filter and 'app' in self.df.columns:
+            self.df = self.df[self.df['app'].fillna("").str.lower().str.contains(app_filter.lower())]
+        if window_filter and 'window_title' in self.df.columns:
+            self.df = self.df[self.df['window_title'].fillna("").str.lower().str.contains(window_filter.lower())]
 
         # Filter out special keys for layout optimization
         special_keys = [
@@ -534,6 +544,8 @@ def main():
 
     parser = argparse.ArgumentParser(description='Optimize keyboard layout based on keylog data.')
     parser.add_argument('keylog_file', help='Path to the keylog CSV file.')
+    parser.add_argument('--app', dest='app_filter', help='Only include keystrokes from apps matching this substring (case-insensitive).')
+    parser.add_argument('--window', dest='window_filter', help='Only include keystrokes from windows matching this substring (case-insensitive).')
     args = parser.parse_args()
 
     # Get password from user
@@ -558,7 +570,7 @@ def main():
     optimizer = KeyboardLayoutOptimizer(args.keylog_file)
     
     # Load and analyze data
-    optimizer.load_and_analyze_data(fernet)
+    optimizer.load_and_analyze_data(fernet, app_filter=args.app_filter, window_filter=args.window_filter)
     
     # Generate initial layout
     optimizer.generate_optimal_layout()
@@ -579,7 +591,11 @@ def main():
         position_finger=optimizer.position_finger,
         finger_strength=optimizer.finger_strength,
     )
-    strain_analyzer.load_keylog(fernet)
+    strain_analyzer.load_keylog(
+        fernet,
+        app_filter=args.app_filter,
+        window_filter=args.window_filter,
+    )
     if strain_analyzer.df is not None and not strain_analyzer.df.empty:
         strain_analyzer.compute_finger_features()
         strain_analyzer.print_report()

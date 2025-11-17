@@ -8,7 +8,7 @@ This project is a set of tools to analyze your typing habits and generate an opt
 
 ## Features
 
-*   **Keystroke Logging**: Records key presses, timestamps, and durations to a CSV file.
+*   **Keystroke Logging**: Records key presses, timestamps, durations, and (when available) the active app and window title to a CSV file.
 *   **Typing Analysis**: Generates plots for key press distribution and durations.
 *   **Keyboard Layout Optimization**:
     *   Generates an optimized keyboard layout based on your personal typing data.
@@ -80,6 +80,12 @@ Run the analytics script to generate plots from your keylog data.
 python analytics.py keylog.csv
 ```
 
+Optional filters to focus on a specific app or window:
+
+```bash
+python analytics.py keylog.csv --app "chrome" --window "Docs"
+```
+
 This will generate two files:
 
 *   `key_press_distribution.png`: A bar chart showing the frequency of each key press.
@@ -91,6 +97,12 @@ Run the keyboard layout optimizer to generate a layout based on your typing data
 
 ```bash
 python keyboard_layout.py keylog.csv
+```
+
+Optional filters to optimize based on a specific app/window:
+
+```bash
+python keyboard_layout.py keylog.csv --app "code" --window "Terminal"
 ```
 
 This will:

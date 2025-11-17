@@ -227,18 +227,34 @@ class FingerStrainAnalyzer:
             return None
         return s.lower()
 
-    def load_keylog(self, fernet: Fernet) -> pd.DataFrame:
+    def load_keylog(
+        self,
+        fernet: Fernet,
+        app_filter: Optional[str] = None,
+        window_filter: Optional[str] = None,
+    ) -> pd.DataFrame:
         """Decrypt and load keylog.csv into a cleaned DataFrame."""
         df = pd.read_csv(self.keylog_file)
 
         try:
-            df["key"] = df["key"].apply(lambda x: fernet.decrypt(x.encode()).decode())
+            df["key"] = df["key"].apply(lambda x: fernet.decrypt(str(x).encode()).decode())
             df["duration"] = df["duration"].apply(
-                lambda x: float(fernet.decrypt(x.encode()).decode())
+                lambda x: float(fernet.decrypt(str(x).encode()).decode())
             )
+            if "app" in df.columns:
+                df["app"] = df["app"].apply(lambda x: fernet.decrypt(str(x).encode()).decode())
+            if "window_title" in df.columns:
+                df["window_title"] = df["window_title"].apply(
+                    lambda x: fernet.decrypt(str(x).encode()).decode()
+                )
         except InvalidToken:
             print("Decryption failed. Check your password/salt.")
             raise
+
+        if app_filter and "app" in df.columns:
+            df = df[df["app"].fillna("").str.lower().str.contains(app_filter.lower())]
+        if window_filter and "window_title" in df.columns:
+            df = df[df["window_title"].fillna("").str.lower().str.contains(window_filter.lower())]
 
         df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
         df = df.dropna(subset=["timestamp"])
@@ -420,6 +436,16 @@ def main() -> None:
         action="store_true",
         help="Use default QWERTY 3×10 layout (default if no custom layout passed).",
     )
+    parser.add_argument(
+        "--app",
+        dest="app_filter",
+        help="Only include keystrokes from apps matching this substring (case-insensitive).",
+    )
+    parser.add_argument(
+        "--window",
+        dest="window_filter",
+        help="Only include keystrokes from windows matching this substring (case-insensitive).",
+    )
     args = parser.parse_args()
 
     password = getpass.getpass("Enter the password to decrypt the keylog: ")
@@ -435,7 +461,7 @@ def main() -> None:
 
     layout = default_qwerty_layout() if args.use_qwerty else None
     analyzer = FingerStrainAnalyzer(keylog_file=args.keylog_file, layout=layout)
-    analyzer.load_keylog(fernet)
+    analyzer.load_keylog(fernet, app_filter=args.app_filter, window_filter=args.window_filter)
     if analyzer.df is None or analyzer.df.empty:
         print("No data to analyze.")
         return

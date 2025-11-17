@@ -50,17 +50,38 @@ def clean_key_names(key):
     }
     return key_mapping.get(str(key), str(key))
 
-def load_data(file_path, fernet):
-    """Load and decrypt data from a CSV file into a pandas DataFrame."""
+def _decrypt_column(df, column, fernet):
+    """Decrypt a column if present; otherwise leave untouched."""
+    if column not in df.columns:
+        return df
+    df[column] = df[column].apply(lambda x: fernet.decrypt(str(x).encode()).decode() if pd.notna(x) else "")
+    return df
+
+
+def _apply_filters(df, app_filter=None, window_filter=None):
+    """Filter rows by app or window substring (case-insensitive)."""
+    if app_filter and 'app' in df.columns:
+        df = df[df['app'].fillna("").str.lower().str.contains(app_filter.lower())]
+    if window_filter and 'window_title' in df.columns:
+        df = df[df['window_title'].fillna("").str.lower().str.contains(window_filter.lower())]
+    return df
+
+
+def load_data(file_path, fernet, app_filter=None, window_filter=None):
+    """Load, decrypt, and optionally filter data from a CSV file into a pandas DataFrame."""
     df = pd.read_csv(file_path)
     
-    # Decrypt key and duration
+    # Decrypt columns
     try:
-        df['key'] = df['key'].apply(lambda x: fernet.decrypt(x.encode()).decode())
-        df['duration'] = df['duration'].apply(lambda x: fernet.decrypt(x.encode()).decode())
+        df = _decrypt_column(df, 'key', fernet)
+        df = _decrypt_column(df, 'duration', fernet)
+        df = _decrypt_column(df, 'app', fernet)
+        df = _decrypt_column(df, 'window_title', fernet)
     except InvalidToken:
         print("Decryption failed. Please check your password.")
         exit()
+
+    df = _apply_filters(df, app_filter, window_filter)
 
     # Clean key names for better visualization
     df['key'] = df['key'].apply(clean_key_names)
@@ -102,6 +123,8 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description='Analyze keylog data.')
     parser.add_argument('keylog_file', help='Path to the keylog CSV file.')
+    parser.add_argument('--app', dest='app_filter', help='Only include keystrokes from apps matching this substring (case-insensitive).')
+    parser.add_argument('--window', dest='window_filter', help='Only include keystrokes from windows matching this substring (case-insensitive).')
     args = parser.parse_args()
 
     # Get password from user
@@ -120,7 +143,7 @@ if __name__ == "__main__":
     fernet = Fernet(key)
 
     # Load the keylog data
-    df = load_data(args.keylog_file, fernet)
+    df = load_data(args.keylog_file, fernet, app_filter=args.app_filter, window_filter=args.window_filter)
 
     # Analyze and plot key press distribution
     analyze_key_press_distribution(df)
