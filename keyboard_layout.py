@@ -240,6 +240,8 @@ class KeyboardLayoutOptimizer:
         - Row/column usage
         - Same-finger bigrams %
         - Same-hand run length distribution
+        - Distance proxy vs home positions
+        - Same-hand awkward bigrams (skip, lateral stretch)
         """
         if not getattr(self, "letter_keys", None):
             return
@@ -317,6 +319,66 @@ class KeyboardLayoutOptimizer:
         for run_len in sorted(run_counts):
             label = f"{run_len}+" if run_len == 5 else str(run_len)
             print(f"  {label}: {run_counts[run_len]}")
+
+        # Distance proxy from home per finger
+        home_col = {
+            "L_pinky": 0,
+            "L_ring": 1,
+            "L_middle": 2,
+            "L_index": 3,
+            "R_index": 6,
+            "R_middle": 7,
+            "R_ring": 8,
+            "R_pinky": 9,
+        }
+        dist_by_finger = Counter()
+        for k in self.letter_keys:
+            pos = self.current_layout.get(k)
+            if pos is None:
+                continue
+            finger = self.position_finger.get(pos)
+            if not finger:
+                continue
+            row, col = pos
+            dist = abs(row - 1) + abs(col - home_col.get(finger, col))
+            dist_by_finger[finger] += dist
+        dist_total = sum(dist_by_finger.values()) or 1
+        print("\nFinger distance share (proxy):")
+        for finger, d in sorted(dist_by_finger.items()):
+            print(f"  {finger}: {100 * d / dist_total:.1f}% (sum {d:.1f})")
+
+        # Awkward same-hand bigrams: skip and lateral stretch
+        skip_counts = Counter()
+        stretch_counts = Counter()
+        total_bigrams = 0
+        for a, b in zip(self.letter_keys, self.letter_keys[1:]):
+            pos_a = self.current_layout.get(a)
+            pos_b = self.current_layout.get(b)
+            if not pos_a or not pos_b:
+                continue
+            finger_a = self.position_finger.get(pos_a, "")
+            finger_b = self.position_finger.get(pos_b, "")
+            hand_a = "L" if finger_a.startswith("L") else "R" if finger_a.startswith("R") else ""
+            hand_b = "L" if finger_b.startswith("L") else "R" if finger_b.startswith("R") else ""
+            if not hand_a or not hand_b:
+                continue
+            total_bigrams += 1
+            dr = abs(pos_a[0] - pos_b[0])
+            dc = abs(pos_a[1] - pos_b[1])
+            if hand_a == hand_b:
+                if dr + dc >= 2:
+                    skip_counts[f"{a}{b}"] += 1
+                if dc >= 2:
+                    stretch_counts[f"{a}{b}"] += 1
+        if total_bigrams:
+            skip_pct = 100 * sum(skip_counts.values()) / total_bigrams
+            stretch_pct = 100 * sum(stretch_counts.values()) / total_bigrams
+            print(f"\nSkip bigrams (>=2 units same hand): {skip_pct:.2f}%")
+            for pair, cnt in skip_counts.most_common(5):
+                print(f"  {pair}: {100 * cnt / total_bigrams:.2f}%")
+            print(f"\nLateral stretch bigrams (>=2 cols same hand): {stretch_pct:.2f}%")
+            for pair, cnt in stretch_counts.most_common(5):
+                print(f"  {pair}: {100 * cnt / total_bigrams:.2f}%")
 
     def print_app_breakdown(self):
         """Print top apps/windows by keystroke count if metadata present."""
