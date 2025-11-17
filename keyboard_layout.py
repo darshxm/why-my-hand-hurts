@@ -241,7 +241,9 @@ class KeyboardLayoutOptimizer:
         - Same-finger bigrams %
         - Same-hand run length distribution
         - Distance proxy vs home positions
-        - Same-hand awkward bigrams (skip, lateral stretch)
+        - Same-hand awkward bigrams (skip, lateral stretch, scissor-ish)
+        - Simple trigram pattern mix (alt, roll in/out, redirect)
+        - Hard words (highest-scoring words by simple effort model)
         """
         if not getattr(self, "letter_keys", None):
             return
@@ -379,6 +381,125 @@ class KeyboardLayoutOptimizer:
             print(f"\nLateral stretch bigrams (>=2 cols same hand): {stretch_pct:.2f}%")
             for pair, cnt in stretch_counts.most_common(5):
                 print(f"  {pair}: {100 * cnt / total_bigrams:.2f}%")
+
+        # Scissor-ish bigrams: same hand, different fingers, diagonal-ish move
+        scissor_counts = Counter()
+        total_bigrams = 0
+        for a, b in zip(self.letter_keys, self.letter_keys[1:]):
+            pos_a = self.current_layout.get(a)
+            pos_b = self.current_layout.get(b)
+            if not pos_a or not pos_b:
+                continue
+            finger_a = self.position_finger.get(pos_a, "")
+            finger_b = self.position_finger.get(pos_b, "")
+            if not finger_a or not finger_b or finger_a == finger_b:
+                continue
+            hand_a = "L" if finger_a.startswith("L") else "R" if finger_a.startswith("R") else ""
+            hand_b = "L" if finger_b.startswith("L") else "R" if finger_b.startswith("R") else ""
+            if hand_a != hand_b:
+                continue
+            total_bigrams += 1
+            dr = abs(pos_a[0] - pos_b[0])
+            dc = abs(pos_a[1] - pos_b[1])
+            if dr >= 1 and dc >= 1:
+                scissor_counts[f"{a}{b}"] += 1
+        if total_bigrams:
+            sc_pct = 100 * sum(scissor_counts.values()) / total_bigrams
+            print(f"\nScissor-ish bigrams (diagonal same-hand): {sc_pct:.2f}%")
+            for pair, cnt in scissor_counts.most_common(5):
+                print(f"  {pair}: {100 * cnt / total_bigrams:.2f}%")
+
+        # Trigram pattern mix
+        def hand_of(key):
+            pos = self.current_layout.get(key)
+            if not pos:
+                return ""
+            return "L" if self.position_finger.get(pos, "").startswith("L") else "R" if self.position_finger.get(pos, "").startswith("R") else ""
+
+        def col_dir(hand, c1, c2):
+            d = c2 - c1
+            if hand == "L":
+                return "in" if d > 0 else "out" if d < 0 else "neutral"
+            if hand == "R":
+                return "in" if d < 0 else "out" if d > 0 else "neutral"
+            return "neutral"
+
+        trig_counts = Counter()
+        trig_total = 0
+        cols = {k: self.current_layout.get(k, (None, None))[1] for k in set(self.letter_keys)}
+        for a, b, c in zip(self.letter_keys, self.letter_keys[1:], self.letter_keys[2:]):
+            ha, hb, hc = hand_of(a), hand_of(b), hand_of(c)
+            ca, cb, cc = cols.get(a), cols.get(b), cols.get(c)
+            if None in (ca, cb, cc):
+                continue
+            trig_total += 1
+            if [ha, hb, hc] in (["L", "R", "L"], ["R", "L", "R"]):
+                trig_counts["alt"] += 1
+                if self.position_finger.get(self.current_layout.get(a, (-1, -1)), "")[-5:] == \
+                   self.position_finger.get(self.current_layout.get(c, (-1, -1)), "")[-5:]:
+                    trig_counts["alt_sfs"] += 1
+                continue
+            if ha == hb == hc and ha in ("L", "R"):
+                d1 = col_dir(ha, ca, cb)
+                d2 = col_dir(ha, cb, cc)
+                if d1 == "in" and d2 == "in":
+                    trig_counts["roll_in"] += 1
+                elif d1 == "out" and d2 == "out":
+                    trig_counts["roll_out"] += 1
+                elif d1 != d2:
+                    trig_counts["redirect"] += 1
+                else:
+                    trig_counts["other"] += 1
+            else:
+                trig_counts["other"] += 1
+        if trig_total:
+            print("\nTrigram pattern mix:")
+            for label in ("alt", "alt_sfs", "roll_in", "roll_out", "redirect", "other"):
+                if trig_counts[label]:
+                    print(f"  {label}: {100 * trig_counts[label] / trig_total:.2f}%")
+
+        # Hard words (simple effort model)
+        words = []
+        seq = []
+        for k in self.df['key']:
+            if k in ('Key.space', 'space', ' '):
+                seq.append(' ')
+            elif isinstance(k, str) and len(k) == 1:
+                seq.append(k.lower())
+        joined = "".join(seq)
+        for w in joined.split(" "):
+            if w:
+                words.append(w)
+
+        def bigram_cost(a, b):
+            pa = self.current_layout.get(a)
+            pb = self.current_layout.get(b)
+            if not pa or not pb:
+                return 0
+            finger_a = self.position_finger.get(pa, "")
+            finger_b = self.position_finger.get(pb, "")
+            cost = abs(pa[0] - pb[0]) + abs(pa[1] - pb[1])
+            if finger_a == finger_b:
+                cost += 3
+            if abs(pa[0] - pb[0]) + abs(pa[1] - pb[1]) >= 2:
+                cost += 2
+            if abs(pa[1] - pb[1]) >= 2:
+                cost += 1
+            return cost
+
+        word_scores = []
+        for w in words:
+            if len(w) < 3:
+                continue
+            s = 0
+            for a, b in zip(w, w[1:]):
+                s += bigram_cost(a, b)
+            word_scores.append((s, w))
+        word_scores.sort(reverse=True)
+        if word_scores:
+            print("\nHard words (highest modeled effort):")
+            for score, w in word_scores[:10]:
+                print(f"  {w}: {score}")
 
     def print_app_breakdown(self):
         """Print top apps/windows by keystroke count if metadata present."""
