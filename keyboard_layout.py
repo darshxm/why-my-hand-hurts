@@ -159,6 +159,7 @@ class KeyboardLayoutOptimizer:
             key_str = str(key)
             if not any(special in key_str for special in special_keys) and len(key_str) <= 2:
                 letter_keys.append(key_str.lower())
+        self.letter_keys = letter_keys
         
         # Calculate frequencies
         self.key_frequencies = Counter(letter_keys)
@@ -223,6 +224,99 @@ class KeyboardLayoutOptimizer:
         self.layout_score = self._score_layout(layout)
         print(f"Initial layout score: {self.layout_score:.2f}")
         return layout
+
+    def _hand_for_key(self, key: str) -> str:
+        """Return 'L' or 'R' for a key based on current layout mapping."""
+        pos = self.current_layout.get(key)
+        if pos is None:
+            return ""
+        finger = self.position_finger.get(pos, "")
+        return "L" if finger.startswith("L") else "R" if finger.startswith("R") else ""
+
+    def print_extended_stats(self):
+        """
+        Cyanophage/Oxeylyzer-style quick stats to explain layout comfort:
+        - Finger usage (per finger + left/right)
+        - Row/column usage
+        - Same-finger bigrams %
+        - Same-hand run length distribution
+        """
+        if not getattr(self, "letter_keys", None):
+            return
+        if not self.current_layout:
+            return
+
+        # Finger usage
+        finger_counts = Counter()
+        hand_counts = Counter()
+        row_counts = Counter()
+        col_counts = Counter()
+
+        for k in self.letter_keys:
+            pos = self.current_layout.get(k)
+            if pos is None:
+                continue
+            finger = self.position_finger.get(pos)
+            if finger:
+                finger_counts[finger] += 1
+                hand_counts[finger[0]] += 1
+            row, col = pos
+            row_counts[row] += 1
+            col_counts[col] += 1
+
+        total = sum(finger_counts.values()) or 1
+        print("\nFinger usage:")
+        for finger, count in sorted(finger_counts.items()):
+            print(f"  {finger}: {100 * count / total:.1f}%")
+        if hand_counts:
+            hand_total = sum(hand_counts.values()) or 1
+            print(f"  Left hand:  {100 * hand_counts.get('L', 0) / hand_total:.1f}%")
+            print(f"  Right hand: {100 * hand_counts.get('R', 0) / hand_total:.1f}%")
+
+        # Row/column usage
+        print("\nRow usage (0=top,1=home,2=bottom):")
+        row_total = sum(row_counts.values()) or 1
+        for row in sorted(row_counts):
+            print(f"  Row {row}: {100 * row_counts[row] / row_total:.1f}%")
+
+        print("\nColumn usage (0 left -> 9 right):")
+        col_total = sum(col_counts.values()) or 1
+        for col in sorted(col_counts):
+            print(f"  Col {col}: {100 * col_counts[col] / col_total:.1f}%")
+
+        # Same-finger bigrams
+        sfb = 0
+        total_bigrams = 0
+        for a, b in zip(self.letter_keys, self.letter_keys[1:]):
+            fa = self.position_finger.get(self.current_layout.get(a, (-1, -1)), "")
+            fb = self.position_finger.get(self.current_layout.get(b, (-1, -1)), "")
+            if not fa or not fb:
+                continue
+            total_bigrams += 1
+            if fa == fb:
+                sfb += 1
+        if total_bigrams:
+            print(f"\nSame-finger bigrams: {100 * sfb / total_bigrams:.2f}%")
+
+        # Same-hand run lengths
+        print("\nSame-hand run lengths (counts):")
+        run_counts = Counter()
+        prev_hand = None
+        run_len = 0
+        for k in self.letter_keys:
+            hand = self._hand_for_key(k)
+            if hand == prev_hand and hand:
+                run_len += 1
+            else:
+                if prev_hand:
+                    run_counts[min(run_len, 5)] += 1  # bucket 5+
+                run_len = 1
+                prev_hand = hand
+        if prev_hand:
+            run_counts[min(run_len, 5)] += 1
+        for run_len in sorted(run_counts):
+            label = f"{run_len}+" if run_len == 5 else str(run_len)
+            print(f"  {label}: {run_counts[run_len]}")
 
     def print_app_breakdown(self):
         """Print top apps/windows by keystroke count if metadata present."""
@@ -632,6 +726,7 @@ def main():
     optimizer.print_layout()
     optimizer.generate_statistics()
     optimizer.compare_with_qwerty()
+    optimizer.print_extended_stats()
 
     # Per-finger strain analysis using the optimized layout
     strain_analyzer = FingerStrainAnalyzer(
