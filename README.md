@@ -86,6 +86,8 @@ Optional filters to focus on a specific app or window:
 python analytics.py keylog.csv --app "chrome" --window "Docs"
 ```
 
+The analytics report will print top apps/windows and average press durations per app before generating the plots.
+
 This will generate two files:
 
 *   `key_press_distribution.png`: A bar chart showing the frequency of each key press.

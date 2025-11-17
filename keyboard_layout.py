@@ -223,6 +223,27 @@ class KeyboardLayoutOptimizer:
         self.layout_score = self._score_layout(layout)
         print(f"Initial layout score: {self.layout_score:.2f}")
         return layout
+
+    def print_app_breakdown(self):
+        """Print top apps/windows by keystroke count if metadata present."""
+        if self.df is None:
+            return
+        if 'app' not in self.df.columns or 'window_title' not in self.df.columns:
+            return
+
+        df = self.df.copy()
+        df['app'] = df['app'].fillna("").replace("", "<unknown>")
+        df['window_title'] = df['window_title'].fillna("").replace("", "<unknown>")
+
+        app_counts = df.groupby('app').size().sort_values(ascending=False)
+        print("\nTop apps by keystrokes:")
+        for app, count in app_counts.head(5).items():
+            print(f"  {app}: {count}")
+
+        window_counts = df.groupby('window_title').size().sort_values(ascending=False)
+        print("\nTop windows by keystrokes:")
+        for title, count in window_counts.head(5).items():
+            print(f"  {title}: {count}")
     
     def optimize_for_bigrams(self, iterations=1000):
         """
@@ -599,6 +620,7 @@ def main():
     
     # Load and analyze data
     optimizer.load_and_analyze_data(fernet, app_filter=args.app_filter, window_filter=args.window_filter)
+    optimizer.print_app_breakdown()
     
     # Generate initial layout
     optimizer.generate_optimal_layout()

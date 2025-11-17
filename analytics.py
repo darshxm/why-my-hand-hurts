@@ -142,6 +142,32 @@ def analyze_key_press_durations(df):
     plt.tight_layout()
     plt.savefig('key_press_durations.png')
 
+
+def summarize_by_app(df):
+    """Print a quick summary of keystrokes and duration by app/window."""
+    if 'app' not in df.columns or 'window_title' not in df.columns:
+        return
+
+    df['app'] = df['app'].fillna("").replace("", "<unknown>")
+    df['window_title'] = df['window_title'].fillna("").replace("", "<unknown>")
+
+    app_counts = df.groupby('app').size().sort_values(ascending=False)
+    print("\nTop apps by keystrokes:")
+    for app, count in app_counts.head(10).items():
+        print(f"  {app}: {count}")
+
+    window_counts = df.groupby('window_title').size().sort_values(ascending=False)
+    print("\nTop windows by keystrokes:")
+    for title, count in window_counts.head(10).items():
+        print(f"  {title}: {count}")
+
+    if 'duration' in df.columns:
+        df['duration'] = pd.to_numeric(df['duration'], errors='coerce')
+        app_durations = df.groupby('app')['duration'].mean().sort_values(ascending=False)
+        print("\nAvg keypress duration by app (s):")
+        for app, dur in app_durations.head(10).items():
+            print(f"  {app}: {dur:.4f}")
+
 if __name__ == "__main__":
     import argparse
 
@@ -168,6 +194,9 @@ if __name__ == "__main__":
 
     # Load the keylog data
     df = load_data(args.keylog_file, fernet, app_filter=args.app_filter, window_filter=args.window_filter)
+
+    # App/window-level summary
+    summarize_by_app(df)
 
     # Analyze and plot key press distribution
     analyze_key_press_distribution(df)
