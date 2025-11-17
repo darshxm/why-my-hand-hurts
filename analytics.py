@@ -60,24 +60,25 @@ def _decrypt_column(df, column, fernet):
 
 def _read_keylog_csv(file_path: str) -> pd.DataFrame:
     """Read keylog CSV tolerating legacy 3-column and new 5-column rows."""
-    try:
-        df = pd.read_csv(file_path)
-    except pd.errors.ParserError:
-        df = pd.read_csv(
-            file_path,
-            engine="python",
-            header=0,
-            names=["timestamp", "key", "duration", "app", "window_title"],
-        )
+    rows = []
+    with open(file_path, "r", encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split(",")
+            if parts[0].lower() == "timestamp":
+                continue
+            if len(parts) < 3:
+                continue
+            while len(parts) < 5:
+                parts.append("")
+            parts = parts[:5]
+            rows.append(parts)
 
-    if isinstance(df.iloc[0, 0], str) and df.iloc[0, 0].lower() == "timestamp":
-        df = df.iloc[1:]
-
-    if "app" not in df.columns:
-        df["app"] = ""
-    if "window_title" not in df.columns:
-        df["window_title"] = ""
-
+    df = pd.DataFrame(
+        rows, columns=["timestamp", "key", "duration", "app", "window_title"]
+    )
     return df
 
 
