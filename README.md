@@ -2,7 +2,7 @@
 
 This project is a set of tools to analyze your typing habits and generate an optimized keyboard layout to reduce strain. It consists of three main components:
 
-1.  **Keylogger**: A simple keylogger that encrypts and records your keystrokes, including the key pressed, the timestamp, and the duration of the press.
+1.  **Keylogger**: A simple keylogger that encrypts and records your keystrokes, including the key pressed, the timestamp, the duration of the press, and (when available) the active app and window title.
 2.  **Analytics**: A script that analyzes the keylog data and generates plots to visualize your typing habits.
 3.  **Keyboard Layout Optimizer**: A script that uses your typing data to generate a keyboard layout optimized for ergonomics and efficiency.
 
