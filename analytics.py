@@ -1,5 +1,24 @@
+# analytics.py
 import pandas as pd
 import matplotlib.pyplot as plt
+import getpass
+import base64
+from cryptography.fernet import Fernet, InvalidToken
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+import os
+
+# --- Decryption Setup ---
+def get_encryption_key(password, salt):
+    """Derive a key from the password and salt."""
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=100000,
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
+    return key
 
 def clean_key_names(key):
     """Replace key names with readable symbols."""
@@ -31,9 +50,18 @@ def clean_key_names(key):
     }
     return key_mapping.get(str(key), str(key))
 
-def load_data(file_path):
-    """Load data from a CSV file into a pandas DataFrame."""
+def load_data(file_path, fernet):
+    """Load and decrypt data from a CSV file into a pandas DataFrame."""
     df = pd.read_csv(file_path)
+    
+    # Decrypt key and duration
+    try:
+        df['key'] = df['key'].apply(lambda x: fernet.decrypt(x.encode()).decode())
+        df['duration'] = df['duration'].apply(lambda x: fernet.decrypt(x.encode()).decode())
+    except InvalidToken:
+        print("Decryption failed. Please check your password.")
+        exit()
+
     # Clean key names for better visualization
     df['key'] = df['key'].apply(clean_key_names)
     return df
@@ -70,9 +98,29 @@ def analyze_key_press_durations(df):
     plt.savefig('key_press_durations.png')
 
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Analyze keylog data.')
+    parser.add_argument('keylog_file', help='Path to the keylog CSV file.')
+    args = parser.parse_args()
+
+    # Get password from user
+    password = getpass.getpass("Enter the password to decrypt the keylog: ")
+
+    # Load the salt
+    salt_file = 'key.salt'
+    if not os.path.exists(salt_file):
+        print("Salt file not found. Make sure 'key.salt' is in the same directory.")
+        exit()
+    with open(salt_file, 'rb') as f:
+        salt = f.read()
+
+    # Create a Fernet instance for decryption
+    key = get_encryption_key(password, salt)
+    fernet = Fernet(key)
+
     # Load the keylog data
-    data_file = 'keylog.csv'
-    df = load_data(data_file)
+    df = load_data(args.keylog_file, fernet)
 
     # Analyze and plot key press distribution
     analyze_key_press_distribution(df)

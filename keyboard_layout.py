@@ -1,11 +1,30 @@
+# keyboard_layout.py
 import pandas as pd
 import numpy as np
 from collections import Counter, defaultdict
 import json
 from datetime import datetime
 import matplotlib.pyplot as plt
+import getpass
+import base64
+import os
 import seaborn as sns
+from cryptography.fernet import Fernet, InvalidToken
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from finger_strain import FingerStrainAnalyzer
 
+# --- Encryption Setup ---
+def get_encryption_key(password, salt):
+    """Derive a key from the password and salt."""
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=100000,
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
+    return key
 
 class KeyboardLayoutOptimizer:
     """Optimize keyboard layout based on typing data and ergonomic principles."""
@@ -71,11 +90,25 @@ class KeyboardLayoutOptimizer:
     # ----------------------------------------------------------------------
     # Data Loading And Analysis
     # ----------------------------------------------------------------------
-    def load_and_analyze_data(self):
-        """Load keystroke data and compute key and bigram frequencies."""
+    def load_and_analyze_data(self, fernet):
+        """Load and decrypt keystroke data and compute key and bigram frequencies."""
         print("Loading keystroke data...")
         self.df = pd.read_csv(self.keylog_file)
         
+        # Decrypt key
+        try:
+            # PRIVACY SUGGESTION:
+            # Instead of decrypting the raw key, which is a privacy risk,
+            # consider a more privacy-preserving approach.
+            # For example, you could categorize keys into types (e.g., 'letter', 'number', 'symbol')
+            # during the logging process in keylogger.py and store the category instead of the raw key.
+            # This would allow for analysis without exposing the exact keys typed.
+            # This would be a major change to the project, but would significantly improve privacy.
+            self.df['key'] = self.df['key'].apply(lambda x: fernet.decrypt(x.encode()).decode())
+        except InvalidToken:
+            print("Decryption failed. Please check your password.")
+            exit()
+
         # Filter out special keys for layout optimization
         special_keys = [
             'Key.', 'shift', 'ctrl', 'alt', 'cmd', 'tab', 'enter',
@@ -252,151 +285,6 @@ class KeyboardLayoutOptimizer:
                     score -= freq * 0.3
         
         return score
-        
-        
-        def compute_qwerty_finger_strain(self,
-                                     same_finger_penalty=10.0,
-                                     use_duration=False):
-        """
-        Compute a relative 'strain index' per finger for a standard QWERTY layout
-        based on your actual keystroke data.
-
-        Parameters
-        ----------
-        same_finger_penalty : float
-            Penalty added per same-finger bigram occurrence (scaled by bigram frequency).
-        use_duration : bool
-            If True, weight keystrokes by key 'duration' from self.df instead of just counts.
-
-        Returns
-        -------
-        strain_raw : dict
-            Raw strain index per finger (arbitrary units).
-        strain_percent : dict
-            Strain per finger as percentage of total.
-        details : dict
-            Contains 'base_load' and 'dynamic_load' per finger.
-        """
-
-        if self.df is None or self.key_frequencies is None:
-            raise ValueError("Call load_and_analyze_data() before computing strain.")
-
-        # --- 1) Define QWERTY positions ---
-        qwerty_positions = {
-            # Top row
-            'q': (0, 0), 'w': (0, 1), 'e': (0, 2), 'r': (0, 3), 't': (0, 4),
-            'y': (0, 5), 'u': (0, 6), 'i': (0, 7), 'o': (0, 8), 'p': (0, 9),
-            # Home row
-            'a': (1, 0), 's': (1, 1), 'd': (1, 2), 'f': (1, 3), 'g': (1, 4),
-            'h': (1, 5), 'j': (1, 6), 'k': (1, 7), 'l': (1, 8), ';': (1, 9),
-            # Bottom row
-            'z': (2, 0), 'x': (2, 1), 'c': (2, 2), 'v': (2, 3), 'b': (2, 4),
-            'n': (2, 5), 'm': (2, 6), ',': (2, 7), '.': (2, 8), '/': (2, 9),
-        }
-
-        # Finger mapping by column (same as in current class)
-        def column_to_finger(col: int) -> str:
-            if col == 0:
-                return 'L_pinky'
-            elif col == 1:
-                return 'L_ring'
-            elif col == 2:
-                return 'L_middle'
-            elif col in (3, 4):
-                return 'L_index'
-            elif col in (5, 6):
-                return 'R_index'
-            elif col == 7:
-                return 'R_middle'
-            elif col == 8:
-                return 'R_ring'
-            else:
-                return 'R_pinky'
-
-        # --- 2) Build per-finger base load from monograms ---
-        fingers = ['L_pinky', 'L_ring', 'L_middle', 'L_index',
-                   'R_index', 'R_middle', 'R_ring', 'R_pinky']
-        base_load = {f: 0.0 for f in fingers}
-        dynamic_load = {f: 0.0 for f in fingers}
-
-        # If use_duration=True, we need an alternative frequency based on summed duration
-        if use_duration:
-            # Build per-key duration sum from self.df
-            key_durations = {}
-            for _, row in self.df.iterrows():
-                key = str(row['key']).lower()
-                if key in qwerty_positions:
-                    key_durations[key] = key_durations.get(key, 0.0) + float(row['duration'])
-        else:
-            key_durations = None  # we will use self.key_frequencies
-
-        # Base load: frequency (or total duration) × position effort
-        for key in qwerty_positions.keys():
-            pos = qwerty_positions[key]
-            effort = self.position_effort.get(pos, 5.0)
-
-            if use_duration:
-                freq_like = key_durations.get(key, 0.0)
-            else:
-                freq_like = self.key_frequencies.get(key, 0)
-
-            if freq_like <= 0:
-                continue
-
-            _, col = pos
-            finger = column_to_finger(col)
-            base_load[finger] += freq_like * effort
-
-        # --- 3) Dynamic load from same-finger bigrams on QWERTY ---
-        for bigram, freq in self.bigram_frequencies.items():
-            if len(bigram) != 2:
-                continue
-            k1, k2 = bigram[0].lower(), bigram[1].lower()
-
-            if k1 not in qwerty_positions or k2 not in qwerty_positions:
-                continue
-
-            pos1 = qwerty_positions[k1]
-            pos2 = qwerty_positions[k2]
-            f1 = column_to_finger(pos1[1])
-            f2 = column_to_finger(pos2[1])
-
-            if use_duration:
-                # crude approximation: scale by avg duration of the two keys
-                dur1 = key_durations.get(k1, 0.0)
-                dur2 = key_durations.get(k2, 0.0)
-                freq_like = (dur1 + dur2) / 2.0  # or just dur1+dur2
-            else:
-                freq_like = freq
-
-            if f1 == f2:
-                dynamic_load[f1] += freq_like * same_finger_penalty
-
-        # --- 4) Combine and normalize ---
-        strain_raw = {}
-        for f in fingers:
-            strain_raw[f] = base_load[f] + dynamic_load[f]
-
-        total_strain = sum(strain_raw.values()) or 1.0
-        strain_percent = {f: (strain_raw[f] / total_strain) * 100.0 for f in fingers}
-
-        details = {
-            'base_load': base_load,
-            'dynamic_load': dynamic_load,
-        }
-
-        # Pretty-print summary
-        print("\n" + "=" * 60)
-        print("QWERTY FINGER STRAIN INDEX")
-        print("=" * 60)
-        print("(Relative units; higher = more modeled load)")
-        for f in fingers:
-            print(f"{f:8s}  Base: {base_load[f]:10.1f}  Dyn: {dynamic_load[f]:10.1f}  "
-                  f"Total: {strain_raw[f]:10.1f}  ({strain_percent[f]:5.1f}%)")
-        print("=" * 60)
-
-        return strain_raw, strain_percent, details
-
     
     # ----------------------------------------------------------------------
     # Visualization And Reporting
@@ -642,14 +530,35 @@ class KeyboardLayoutOptimizer:
 
 def main():
     """Main function to run the keyboard layout optimizer."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Optimize keyboard layout based on keylog data.')
+    parser.add_argument('keylog_file', help='Path to the keylog CSV file.')
+    args = parser.parse_args()
+
+    # Get password from user
+    password = getpass.getpass("Enter the password to decrypt the keylog: ")
+
+    # Load the salt
+    salt_file = 'key.salt'
+    if not os.path.exists(salt_file):
+        print("Salt file not found. Make sure 'key.salt' is in the same directory.")
+        exit()
+    with open(salt_file, 'rb') as f:
+        salt = f.read()
+
+    # Create a Fernet instance for decryption
+    key = get_encryption_key(password, salt)
+    fernet = Fernet(key)
+
     print("=" * 60)
     print("KEYBOARD LAYOUT OPTIMIZER")
     print("=" * 60)
     
-    optimizer = KeyboardLayoutOptimizer('keylog.csv')
+    optimizer = KeyboardLayoutOptimizer(args.keylog_file)
     
     # Load and analyze data
-    optimizer.load_and_analyze_data()
+    optimizer.load_and_analyze_data(fernet)
     
     # Generate initial layout
     optimizer.generate_optimal_layout()
@@ -661,6 +570,21 @@ def main():
     optimizer.print_layout()
     optimizer.generate_statistics()
     optimizer.compare_with_qwerty()
+
+    # Per-finger strain analysis using the optimized layout
+    strain_analyzer = FingerStrainAnalyzer(
+        keylog_file=args.keylog_file,
+        layout=optimizer.current_layout,
+        position_effort=optimizer.position_effort,
+        position_finger=optimizer.position_finger,
+        finger_strength=optimizer.finger_strength,
+    )
+    strain_analyzer.load_keylog(fernet)
+    if strain_analyzer.df is not None and not strain_analyzer.df.empty:
+        strain_analyzer.compute_finger_features()
+        strain_analyzer.print_report()
+    else:
+        print("Skipping strain analysis (no usable keystrokes for this layout).")
     
     # Save and visualize
     optimizer.save_layout()
