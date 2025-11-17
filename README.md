@@ -30,6 +30,11 @@ This project is a set of tools to analyze your typing habits and generate an opt
     sudo apt-get install python3-dev
     ```
 
+    **Active window capture on Linux**: To record app/window titles, make sure `xdotool` is installed (X11 sessions). On Debian/Ubuntu you can install it with:
+    ```bash
+    sudo apt-get install xdotool
+    ```
+
 2.  **Activate the virtual environment:**
 
     ```bash

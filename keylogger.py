@@ -66,6 +66,43 @@ fernet = Fernet(key)
 # Dictionary to store press start times for each key
 press_times = {}
 
+def _linux_active_window_via_xdotool():
+    """
+    Best-effort Linux fallback using xdotool/wmctrl (X11 only).
+    Returns (app_name, window_title) or (None, None) if unavailable.
+    """
+    cmds = [["xdotool", "getwindowfocus"], ["xdotool", "getactivewindow"]]
+    window_id = None
+    for cmd in cmds:
+        try:
+            window_id = subprocess.check_output(cmd, text=True, timeout=0.5).strip()
+            if window_id:
+                break
+        except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+            continue
+    if not window_id:
+        return None, None
+
+    title = None
+    try:
+        title = subprocess.check_output(
+            ["xdotool", "getwindowname", window_id], text=True, timeout=0.5
+        ).strip() or None
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+    app = None
+    try:
+        pid_str = subprocess.check_output(
+            ["xdotool", "getwindowpid", window_id], text=True, timeout=0.5
+        ).strip()
+        if pid_str and pid_str.isdigit() and HAS_PSUTIL:
+            app = psutil.Process(int(pid_str)).name()
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired, psutil.Error):
+        pass
+
+    return app, title
+
 def get_active_app_window() -> Tuple[Optional[str], Optional[str]]:
     """
     Return (app_name, window_title) for the active window.
@@ -77,13 +114,29 @@ def get_active_app_window() -> Tuple[Optional[str], Optional[str]]:
             win = pywinctl.getActiveWindow()
             if win:
                 title = win.title or None
+                pid = None
+                # pywinctl exposes getPID() on Linux; getPid() on Windows/macOS
+                for pid_attr in ("getPID", "getPid"):
+                    getter = getattr(win, pid_attr, None)
+                    if callable(getter):
+                        try:
+                            pid = getter()
+                            break
+                        except Exception:
+                            pid = None
                 app = None
+                # Prefer the app name reported by pywinctl itself
                 try:
-                    pid = win.getPid()
-                    if HAS_PSUTIL:
-                        app = psutil.Process(pid).name()
+                    app = win.getAppName() or None
                 except Exception:
-                    pass
+                    app = None
+                # If pywinctl did not return an app name, try resolving via psutil and PID
+                if not app:
+                    try:
+                        if pid and HAS_PSUTIL:
+                            app = psutil.Process(pid).name()
+                    except Exception:
+                        app = None
                 return app, title
         except Exception:
             pass
@@ -106,6 +159,11 @@ def get_active_app_window() -> Tuple[Optional[str], Optional[str]]:
             return app, title
         except Exception:
             return None, None
+
+    if system == "Linux":
+        app, title = _linux_active_window_via_xdotool()
+        if app or title:
+            return app, title
 
     # macOS fallback via AppleScript (no extra deps)
     if system == "Darwin":
