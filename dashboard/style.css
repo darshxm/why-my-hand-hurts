@@ -1,0 +1,154 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  background: #0b1220;
+  color: #e8eef7;
+}
+
+a {
+  color: #8ab4ff;
+}
+
+#app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  color: #9fb0cc;
+}
+
+.filters {
+  display: flex;
+  gap: 8px;
+}
+
+input {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #1f2c43;
+  background: #111a2a;
+  color: #e8eef7;
+}
+
+button {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: none;
+  background: #2a84ff;
+  color: white;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.card {
+  padding: 14px;
+  background: #121c2e;
+  border: 1px solid #1f2c43;
+  border-radius: 12px;
+}
+
+.label {
+  margin: 0 0 6px;
+  color: #9fb0cc;
+  font-size: 13px;
+}
+
+.value {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.panel {
+  background: #121c2e;
+  border: 1px solid #1f2c43;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 8px 6px;
+  border-bottom: 1px solid #1f2c43;
+}
+
+th {
+  text-align: left;
+  color: #9fb0cc;
+  font-weight: 500;
+}
+
+.empty {
+  color: #9fb0cc;
+  margin: 6px 0;
+}
+
+.toast {
+  position: fixed;
+  bottom: 14px;
+  right: 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid #1f2c43;
+}
+
+.toast.info {
+  background: #111a2a;
+  color: #e8eef7;
+}
+
+.toast.error {
+  background: #3a1116;
+  color: #ffc9c9;
+  border-color: #ff6b6b;
+}

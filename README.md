@@ -98,7 +98,19 @@ This will generate two files:
 *   `key_press_distribution.png`: A bar chart showing the frequency of each key press.
 *   `key_press_durations.png`: A box plot showing the duration of each key press.
 
-### 3. Generate an Optimized Keyboard Layout
+### 3. View the Dashboard (Vue + Chart.js)
+
+Run a small API that serves decrypted analytics for the Vue frontend:
+
+```bash
+python dashboard/server.py keylog.csv
+```
+
+Then open http://127.0.0.1:5000 in your browser. Use the app/window filters at the top to focus the charts and tables. On Linux/X11, ensure `xdotool` is installed so app/window metadata is captured.
+
+**Known dashboard caveat**: Large logs with many distinct app/window titles will render long tables; the page can grow tall as you scroll. Filter by app/window to constrain results if it feels unwieldy.
+
+### 4. Generate an Optimized Keyboard Layout
 
 Run the keyboard layout optimizer to generate a layout based on your typing data.
 

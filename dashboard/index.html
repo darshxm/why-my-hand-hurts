@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Keylog Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div>
+        <h1>Keylog Dashboard</h1>
+        <p class="subtitle">Live analytics from your encrypted keylog</p>
+      </div>
+      <div class="filters">
+        <input v-model="filters.app" placeholder="Filter by app…" />
+        <input v-model="filters.window" placeholder="Filter by window…" />
+        <button @click="reload" :disabled="loading">Reload</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="cards">
+        <div class="card">
+          <p class="label">Total keystrokes</p>
+          <p class="value">{{ summary?.totalKeystrokes ?? '—' }}</p>
+        </div>
+        <div class="card">
+          <p class="label">Top app</p>
+          <p class="value">{{ summary?.topApps?.[0]?.app ?? '—' }}</p>
+        </div>
+        <div class="card">
+          <p class="label">Top window</p>
+          <p class="value">{{ summary?.topWindows?.[0]?.window_title ?? '—' }}</p>
+        </div>
+      </section>
+
+      <section class="grid">
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Top Apps</h2>
+          </div>
+          <table v-if="summary?.topApps?.length">
+            <thead>
+              <tr><th>App</th><th>Count</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in summary.topApps" :key="row.app">
+                <td>{{ row.app }}</td>
+                <td>{{ row.count }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p v-else class="empty">No data</p>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Top Windows</h2>
+          </div>
+          <table v-if="summary?.topWindows?.length">
+            <thead>
+              <tr><th>Window</th><th>Count</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in summary.topWindows" :key="row.window_title">
+                <td>{{ row.window_title }}</td>
+                <td>{{ row.count }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <p v-else class="empty">No data</p>
+        </div>
+      </section>
+
+      <section class="grid">
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Keystroke Frequency</h2>
+          </div>
+          <canvas id="keyFreqChart" height="200"></canvas>
+        </div>
+        <div class="panel">
+          <div class="panel-header">
+            <h2>Avg Duration per Key (s)</h2>
+          </div>
+          <canvas id="keyDurationChart" height="200"></canvas>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Average Duration by App (s)</h2>
+        </div>
+        <table v-if="summary?.avgDurations?.length">
+          <thead>
+            <tr><th>App</th><th>Avg Duration (s)</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in summary.avgDurations" :key="row.app">
+              <td>{{ row.app }}</td>
+              <td>{{ row.duration?.toFixed ? row.duration.toFixed(4) : row.duration }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <p v-else class="empty">No data</p>
+      </section>
+    </main>
+
+    <div v-if="error" class="toast error">
+      {{ error }}
+    </div>
+    <div v-if="loading" class="toast info">Loading…</div>
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>

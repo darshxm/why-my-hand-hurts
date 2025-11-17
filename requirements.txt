@@ -7,3 +7,4 @@ cryptography
 pywinctl
 psutil
 pywin32; platform_system == "Windows"
+flask
