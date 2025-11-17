@@ -234,7 +234,15 @@ class FingerStrainAnalyzer:
         window_filter: Optional[str] = None,
     ) -> pd.DataFrame:
         """Decrypt and load keylog.csv into a cleaned DataFrame."""
-        df = pd.read_csv(self.keylog_file)
+        try:
+            df = pd.read_csv(self.keylog_file)
+        except pd.errors.ParserError:
+            df = pd.read_csv(
+                self.keylog_file,
+                engine="python",
+                header=0,
+                names=["timestamp", "key", "duration", "app", "window_title"],
+            )
 
         try:
             df["key"] = df["key"].apply(lambda x: fernet.decrypt(str(x).encode()).decode())
@@ -250,6 +258,11 @@ class FingerStrainAnalyzer:
         except InvalidToken:
             print("Decryption failed. Check your password/salt.")
             raise
+
+        if "app" not in df.columns:
+            df["app"] = ""
+        if "window_title" not in df.columns:
+            df["window_title"] = ""
 
         if app_filter and "app" in df.columns:
             df = df[df["app"].fillna("").str.lower().str.contains(app_filter.lower())]

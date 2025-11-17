@@ -90,10 +90,34 @@ class KeyboardLayoutOptimizer:
     # ----------------------------------------------------------------------
     # Data Loading And Analysis
     # ----------------------------------------------------------------------
+    def _read_keylog_csv(self) -> pd.DataFrame:
+        """Read keylog CSV tolerating legacy 3-column and new 5-column rows."""
+        try:
+            df = pd.read_csv(self.keylog_file)
+        except pd.errors.ParserError:
+            df = pd.read_csv(
+                self.keylog_file,
+                engine="python",
+                header=0,
+                names=["timestamp", "key", "duration", "app", "window_title"],
+            )
+
+        # If header was read as a data row, drop it
+        if isinstance(df.iloc[0, 0], str) and df.iloc[0, 0].lower() == "timestamp":
+            df = df.iloc[1:]
+
+        # Ensure newer columns exist even for legacy logs
+        if "app" not in df.columns:
+            df["app"] = ""
+        if "window_title" not in df.columns:
+            df["window_title"] = ""
+
+        return df
+
     def load_and_analyze_data(self, fernet, app_filter=None, window_filter=None):
         """Load and decrypt keystroke data and compute key and bigram frequencies."""
         print("Loading keystroke data...")
-        self.df = pd.read_csv(self.keylog_file)
+        self.df = self._read_keylog_csv()
         
         # Decrypt key
         try:

@@ -58,6 +58,29 @@ def _decrypt_column(df, column, fernet):
     return df
 
 
+def _read_keylog_csv(file_path: str) -> pd.DataFrame:
+    """Read keylog CSV tolerating legacy 3-column and new 5-column rows."""
+    try:
+        df = pd.read_csv(file_path)
+    except pd.errors.ParserError:
+        df = pd.read_csv(
+            file_path,
+            engine="python",
+            header=0,
+            names=["timestamp", "key", "duration", "app", "window_title"],
+        )
+
+    if isinstance(df.iloc[0, 0], str) and df.iloc[0, 0].lower() == "timestamp":
+        df = df.iloc[1:]
+
+    if "app" not in df.columns:
+        df["app"] = ""
+    if "window_title" not in df.columns:
+        df["window_title"] = ""
+
+    return df
+
+
 def _apply_filters(df, app_filter=None, window_filter=None):
     """Filter rows by app or window substring (case-insensitive)."""
     if app_filter and 'app' in df.columns:
@@ -69,7 +92,7 @@ def _apply_filters(df, app_filter=None, window_filter=None):
 
 def load_data(file_path, fernet, app_filter=None, window_filter=None):
     """Load, decrypt, and optionally filter data from a CSV file into a pandas DataFrame."""
-    df = pd.read_csv(file_path)
+    df = _read_keylog_csv(file_path)
     
     # Decrypt columns
     try:
